@@ -1,0 +1,31 @@
+name: Uniswap LP Monitor Cron
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # Каждые 4 часа: 7:00, 11:00, 15:00, 19:00, 23:00 MSK (UTC+3)
+  workflow_dispatch:  # Для ручного запуска
+
+jobs:
+  run-monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run script
+      run: python uniswap_monitor.py
+
+    - name: Log completion
+      if: always()
+      run: echo "Cron job completed! Check Telegram for results."
