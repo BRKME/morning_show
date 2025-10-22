@@ -1,4 +1,4 @@
-name: Uniswap LP Monitor Cron
+name: Utro
 
 on:
   schedule:
