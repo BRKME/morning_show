@@ -2,8 +2,8 @@ name: Utro
 
 on:
   schedule:
-    - cron: '0 8 * * *'  # Каждые 4 часа: 7:00, 11:00, 15:00, 19:00, 23:00 MSK (UTC+3)
-  workflow_dispatch:  # Для ручного запуска
+    - cron: '0 4,16 * * *'  # 7:00 и 19:00 MSK (UTC+3)
+  workflow_dispatch:  # Ручной запуск
 
 jobs:
   run-monitor:
