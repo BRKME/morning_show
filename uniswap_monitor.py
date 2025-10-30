@@ -218,7 +218,7 @@ def get_sp500():
     """S&P 500 из yfinance"""
     try:
         ticker = yf.Ticker("^GSPC")
-        hist = ticker.history(period="2d")
+        hist = ticker.history(period="5d")  # Увеличили период для большего количества данных
         if len(hist) < 2:
             current = hist['Close'].iloc[-1] if len(hist) > 0 else None
             return current, 0.0 if current else None
@@ -234,7 +234,7 @@ def get_usd_rub():
     """USD/RUB из yfinance"""
     try:
         ticker = yf.Ticker("USDRUB=X")
-        hist = ticker.history(period="2d")
+        hist = ticker.history(period="5d")  # Увеличили период для большего количества данных
         if len(hist) < 2:
             current = hist['Close'].iloc[-1] if len(hist) > 0 else None
             return current, 0.0 if current else None
@@ -295,28 +295,28 @@ def format_message():
     # S&P 500
     sp_price, sp_change = get_sp500()
     if sp_price:
-        message += f"📊 S&P 500: {sp_price:,.2f} {sp_change:+.2f}%\n"
+        message += f"📊 S&P 500: {sp_price:,.0f} {sp_change:+.0f}%\n"
     else:
         message += "📊 S&P 500: Нет данных\n"
 
     # USD/RUB
     rub_price, rub_change = get_usd_rub()
     if rub_price:
-        message += f"💵 USD/RUB: {rub_price:.4f} {rub_change:+.2f}%\n"
+        message += f"💵 USD/RUB: {rub_price:.0f} {rub_change:+.0f}%\n"
     else:
         message += "💵 USD/RUB: Нет данных\n"
 
     # Fear & Greed
     fg_value, fg_class, fg_change = get_fear_greed()
     if fg_value:
-        message += f"😱 Crypto Fear & Greed: {fg_value} ({fg_class}) {fg_change:+.1f}%\n"
+        message += f"😱 Crypto Fear & Greed: {fg_value:.0f} ({fg_class})\n"
     else:
         message += "😱 Crypto Fear & Greed: Нет данных\n"
 
     # BTC Dominance
     btc_dom = get_btc_dominance()
     if btc_dom:
-        message += f"₿ BTC Dominance: {btc_dom:.2f}%\n\n"
+        message += f"₿ BTC Dominance: {btc_dom:.0f}%\n\n"
     else:
         message += "₿ BTC Dominance: Нет данных\n\n"
 
@@ -326,17 +326,17 @@ def format_message():
 
     # Топ-4 крипто + RSI (без XRP)
     cryptos = get_top_cryptos()
-    message += "📈 Топ Крипто (USD):\n"
+    message += "📈 Топ Крипто (USD):\n\n"
     if cryptos and fg_value is not None:
         max_sym_len = max(len(c['symbol']) for c in cryptos) + 1  # +1 для пробела
-        max_price_len = max(len(f"${c['price']:,.2f}") for c in cryptos)
+        max_price_len = max(len(f"${c['price']:.0f}") for c in cryptos)
         for crypto in cryptos:
             change_emoji = "🟢" if crypto['change_24h'] >= 0 else "🔴"
             sym_padded = f"{crypto['symbol']} ".ljust(max_sym_len)
-            price_padded = f"${crypto['price']:,.2f}".ljust(max_price_len)
-            change_str = f"{crypto['change_24h']:+.2f}%"
-            rsi_d_str = f"{crypto['rsi_daily']:.1f}" if crypto['rsi_daily'] is not None else "N/A"
-            rsi_w_str = f"{crypto['rsi_weekly']:.1f}" if crypto['rsi_weekly'] is not None else "N/A"
+            price_padded = f"${crypto['price']:.0f}".ljust(max_price_len)
+            change_str = f"{crypto['change_24h']:+.0f}%"
+            rsi_d_str = f"{crypto['rsi_daily']:.0f}" if crypto['rsi_daily'] is not None else "N/A"
+            rsi_w_str = f"{crypto['rsi_weekly']:.0f}" if crypto['rsi_weekly'] is not None else "N/A"
             signal = get_trading_signal(crypto['rsi_daily'], fg_value)
             message += f"{change_emoji} {sym_padded}: {price_padded} {change_str} | RSI (1D/W): {rsi_d_str} /{rsi_w_str} {signal}\n"
     else:
