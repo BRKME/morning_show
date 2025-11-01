@@ -289,12 +289,6 @@ def format_message():
     weather_spb = get_weather_spb()
     message += f"🌤️ Погода в СПб: {weather_spb}\n\n"
 
-    # Проверка на пятницу/выходные
-    if weekday_num >= 4:  # Пятница и позже
-        message += "Алкоголь сегодня запрещен - иначе какая ты пантера\n\n"
-    else:
-        message += "\n"
-
     # S&P 500
     sp_price, sp_change = get_sp500()
     if sp_price:
