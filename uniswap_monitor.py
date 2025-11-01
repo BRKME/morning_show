@@ -284,7 +284,10 @@ def format_message():
         greeting = "🌆 Добрый вечер!"
     
     message = f"{greeting} Рынки на {full_date}\n\n"
-    message += f"🐆 Пантера. Ничего не бойся и не сдавайся!\n"
+    
+    # Погода в СПб
+    weather_spb = get_weather_spb()
+    message += f"🌤️ Погода в СПб: {weather_spb}\n\n"
 
     # Проверка на пятницу/выходные
     if weekday_num >= 4:  # Пятница и позже
@@ -319,10 +322,6 @@ def format_message():
         message += f"₿ BTC Dominance: {btc_dom:.0f}%\n\n"
     else:
         message += "₿ BTC Dominance: Нет данных\n\n"
-
-    # Погода в СПб
-    weather_spb = get_weather_spb()
-    message += f"🌤️ Погода в СПб: {weather_spb}\n\n"
 
     # Топ-4 крипто + RSI (без XRP)
     cryptos = get_top_cryptos()
