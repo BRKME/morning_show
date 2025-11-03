@@ -8,6 +8,15 @@ from datetime import datetime
 BOT_TOKEN = '8442392037:AAEiM_b4QfdFLqbmmc1PXNvA99yxmFVLEp8'  # Твой токен
 CHAT_ID = '350766421'      # Твой chat_id
 
+def format_number(number):
+    """Форматирует число с пробелами между тысячами"""
+    if number is None:
+        return "N/A"
+    try:
+        return f"{number:,.0f}".replace(",", " ")
+    except:
+        return str(number)
+
 def get_trading_signal(rsi, fear_greed_index):
     """
     Генерирует торговый сигнал на основе RSI (1D) и Crypto Fear & Greed Index.
@@ -118,29 +127,6 @@ def get_rsi(coin_id, days=30):
     except Exception as e:
         print(f"Ошибка RSI для {coin_id}: {e}")
         return None
-
-def get_weather_spb():
-    """Погода в Санкт-Петербурге (Россия) из wttr.in (в Цельсиях, с инфо о дожде)"""
-    try:
-        response = requests.get('http://wttr.in/Saint_Petersburg_RU?format=%C+%t+%p&M', timeout=10)
-        if response.status_code == 200:
-            weather_str = response.text.strip()
-            parts = weather_str.split('+')
-            if len(parts) >= 2:
-                condition = parts[0].strip()
-                temp = parts[1].strip()
-                precip = parts[2].strip() if len(parts) > 2 else "0 mm"
-                rain_keywords = ['rain', 'shower', 'drizzle', 'дождь']
-                has_rain = any(keyword in condition.lower() for keyword in rain_keywords)
-                rain_info = "с дождём" if has_rain else "без дождя"
-                umbrella = " (не забудь зонт!)" if has_rain else ""
-                return f"{condition} {temp}, {rain_info}{umbrella}"
-            return weather_str
-        else:
-            return "Нет данных"
-    except Exception as e:
-        print(f"Ошибка получения погоды: {e}")
-        return "Нет данных"
 
 def get_top_cryptos():
     """Топ-4 крипто из CoinGecko (исключая USDT и XRP) + RSI"""
@@ -285,21 +271,17 @@ def format_message():
     
     message = f"{greeting} Рынки на {full_date}\n\n"
     
-    # Погода в СПб
-    weather_spb = get_weather_spb()
-    message += f"🌤️ Погода в СПб: {weather_spb}\n\n"
-
     # S&P 500
     sp_price, sp_change = get_sp500()
     if sp_price:
-        message += f"📊 S&P 500: {sp_price:,.0f} {sp_change:+.0f}%\n"
+        message += f"📊 S&P 500: {format_number(sp_price)} {sp_change:+.0f}%\n"
     else:
         message += "📊 S&P 500: Нет данных\n"
 
     # USD/RUB
     rub_price, rub_change = get_usd_rub()
     if rub_price:
-        message += f"💵 USD/RUB: {rub_price:.0f} {rub_change:+.0f}%\n"
+        message += f"💵 USD/RUB: {format_number(rub_price)} {rub_change:+.0f}%\n"
     else:
         message += "💵 USD/RUB: Нет данных\n"
 
@@ -322,16 +304,17 @@ def format_message():
     message += "📈 Топ Крипто (USD):\n\n"
     if cryptos and fg_value is not None:
         max_sym_len = max(len(c['symbol']) for c in cryptos) + 1  # +1 для пробела
-        max_price_len = max(len(f"${c['price']:.0f}") for c in cryptos)
+        max_price_len = max(len(f"${format_number(c['price'])}") for c in cryptos)
         for crypto in cryptos:
             change_emoji = "🟢" if crypto['change_24h'] >= 0 else "🔴"
             sym_padded = f"{crypto['symbol']} ".ljust(max_sym_len)
-            price_padded = f"${crypto['price']:.0f}".ljust(max_price_len)
+            price_padded = f"${format_number(crypto['price'])}".ljust(max_price_len)
             change_str = f"{crypto['change_24h']:+.0f}%"
             rsi_d_str = f"{crypto['rsi_daily']:.0f}" if crypto['rsi_daily'] is not None else "N/A"
             rsi_w_str = f"{crypto['rsi_weekly']:.0f}" if crypto['rsi_weekly'] is not None else "N/A"
             signal = get_trading_signal(crypto['rsi_daily'], fg_value)
-            message += f"{change_emoji} {sym_padded}: {price_padded} {change_str} | RSI (1D/W): {rsi_d_str} /{rsi_w_str} {signal}\n"
+            # RSI меньшим шрифтом с использованием HTML тегов
+            message += f"{change_emoji} {sym_padded}: {price_padded} {change_str} | <code>RSI (1D/W): {rsi_d_str}/{rsi_w_str} {signal}</code>\n"
     else:
         message += "Нет данных\n"
 
