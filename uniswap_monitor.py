@@ -1,5 +1,4 @@
 import requests
-import yfinance as yf
 import pandas as pd
 import time
 from datetime import datetime
@@ -83,6 +82,7 @@ def get_trading_signal(rsi, fear_greed_index):
         return "N/A"
 
 def calculate_rsi(prices, period=14):
+    """Расчет RSI"""
     try:
         if len(prices) < period + 1:
             return None
@@ -100,72 +100,132 @@ def calculate_rsi(prices, period=14):
         print(f"Ошибка расчета RSI: {e}")
         return None
 
-def get_rsi_2h_yfinance(symbol):
-    """Получение RSI 2H через yfinance"""
+def get_binance_klines(symbol, interval='1h', limit=100):
+    """Получение свечей с Binance"""
     try:
-        ticker_map = {
-            'BTC': 'BTC-USD',
-            'ETH': 'ETH-USD', 
-            'BNB': 'BNB-USD',
-            'SOL': 'SOL-USD'
+        url = f"https://api.binance.com/api/v3/klines"
+        params = {
+            'symbol': f"{symbol}USDT",
+            'interval': interval,
+            'limit': limit
         }
+        response = requests.get(url, params=params, timeout=10)
         
-        ticker_symbol = ticker_map.get(symbol)
-        if not ticker_symbol:
-            return None
-            
-        ticker = yf.Ticker(ticker_symbol)
-        # Получаем данные за 5 дней с интервалом 1 час
-        hist = ticker.history(period="5d", interval="1h")
-        
-        if len(hist) < 15:
-            return None
-        
-        # Группируем по 2 часа
-        hist_2h = hist.resample('2H').agg({
-            'Open': 'first',
-            'High': 'max',
-            'Low': 'min',
-            'Close': 'last',
-            'Volume': 'sum'
-        }).dropna()
-        
-        if len(hist_2h) < 15:
-            return None
-            
-        return calculate_rsi(hist_2h['Close'], 14)
-        
+        if response.status_code == 200:
+            data = response.json()
+            df = pd.DataFrame(data, columns=[
+                'timestamp', 'open', 'high', 'low', 'close', 
+                'volume', 'close_time', 'quote_volume', 'trades',
+                'taker_buy_base', 'taker_buy_quote', 'ignore'
+            ])
+            df['close'] = df['close'].astype(float)
+            return df['close']
+        return None
     except Exception as e:
-        print(f"Ошибка yfinance RSI 2H для {symbol}: {e}")
+        print(f"Ошибка Binance для {symbol}: {e}")
         return None
 
-def get_rsi_yfinance(symbol, days=30):
-    """Альтернативный способ получения RSI через yfinance"""
+def get_rsi_binance(symbol, interval='1h', period=14):
+    """RSI через Binance"""
     try:
-        ticker_map = {
-            'BTC': 'BTC-USD',
-            'ETH': 'ETH-USD', 
-            'BNB': 'BNB-USD',
-            'SOL': 'SOL-USD'
-        }
-        
-        ticker_symbol = ticker_map.get(symbol)
-        if not ticker_symbol:
-            return None
-            
-        ticker = yf.Ticker(ticker_symbol)
-        hist = ticker.history(period=f"{days+14}d")
-        
-        if len(hist) < 15:
-            return None
-            
-        return calculate_rsi(hist['Close'], 14)
-        
-    except Exception as e:
-        print(f"Ошибка yfinance RSI для {symbol}: {e}")
+        prices = get_binance_klines(symbol, interval, limit=period + 50)
+        if prices is not None and len(prices) >= period + 1:
+            return calculate_rsi(prices, period)
         return None
+    except Exception as e:
+        print(f"Ошибка RSI Binance для {symbol}: {e}")
+        return None
+
+def get_sp500_twelve():
+    """S&P 500 через Twelve Data API (бесплатный)"""
+    try:
+        url = "https://api.twelvedata.com/time_series"
+        params = {
+            'symbol': 'SPX',
+            'interval': '1day',
+            'outputsize': 2,
+            'apikey': 'demo'  # Используем демо-ключ
+        }
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if 'values' in data and len(data['values']) >= 2:
+                current = float(data['values'][0]['close'])
+                prev = float(data['values'][1]['close'])
+                change = ((current - prev) / prev) * 100
+                return round(current, 2), round(change, 2)
+        return None, None
+    except Exception as e:
+        print(f"Ошибка S&P 500 (Twelve): {e}")
+        return None, None
+
+def get_sp500_alphavantage():
+    """S&P 500 через Alpha Vantage (бесплатный)"""
+    try:
+        url = "https://www.alphavantage.co/query"
+        params = {
+            'function': 'GLOBAL_QUOTE',
+            'symbol': 'SPY',  # ETF для S&P 500
+            'apikey': 'demo'
+        }
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if 'Global Quote' in data:
+                quote = data['Global Quote']
+                price = float(quote.get('05. price', 0))
+                change = float(quote.get('10. change percent', '0').replace('%', ''))
+                return round(price, 2), round(change, 2)
+        return None, None
+    except Exception as e:
+        print(f"Ошибка S&P 500 (Alpha Vantage): {e}")
+        return None, None
+
+def get_usd_rub_cbr():
+    """USD/RUB через ЦБ РФ"""
+    try:
+        url = "https://www.cbr-xml-daily.ru/daily_json.js"
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if 'Valute' in data and 'USD' in data['Valute']:
+                usd_data = data['Valute']['USD']
+                current = usd_data['Value']
+                prev = usd_data['Previous']
+                change = ((current - prev) / prev) * 100
+                return round(current, 2), round(change, 2)
+        return None, None
+    except Exception as e:
+        print(f"Ошибка USD/RUB (ЦБ): {e}")
+        return None, None
+
+def get_usd_rub_coingecko():
+    """USD/RUB через CoinGecko (через стейблкоины)"""
+    try:
+        url = "https://api.coingecko.com/api/v3/simple/price"
+        params = {
+            'ids': 'tether',
+            'vs_currencies': 'rub',
+            'include_24hr_change': 'true'
+        }
+        response = requests.get(url, params=params, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if 'tether' in data and 'rub' in data['tether']:
+                price = data['tether']['rub']
+                change = data['tether'].get('rub_24h_change', 0)
+                return round(price, 2), round(change, 2)
+        return None, None
+    except Exception as e:
+        print(f"Ошибка USD/RUB (CoinGecko): {e}")
+        return None, None
 
 def get_top_cryptos():
+    """Топ-4 крипты с CoinGecko + RSI с Binance"""
     url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false&price_change_percentage=24h"
     
     try:
@@ -179,15 +239,27 @@ def get_top_cryptos():
         data = response.json()
         cryptos = []
         
+        # Маппинг для Binance символов
+        binance_map = {
+            'BTC': 'BTC',
+            'ETH': 'ETH',
+            'BNB': 'BNB',
+            'SOL': 'SOL'
+        }
+        
         for coin in data:
             symbol_upper = coin.get('symbol', '').upper()
             if symbol_upper in ['USDT', 'XRP']:
+                continue
+            
+            if symbol_upper not in binance_map:
                 continue
                 
             cryptos.append({
                 'id': coin.get('id', ''),
                 'name': coin.get('name', 'Unknown'),
                 'symbol': symbol_upper,
+                'binance_symbol': binance_map[symbol_upper],
                 'price': coin.get('current_price', 0),
                 'change_24h': coin.get('price_change_percentage_24h', 0)
             })
@@ -197,19 +269,25 @@ def get_top_cryptos():
         
         print(f"Найдено {len(cryptos)} криптовалют")
         
+        # Получаем RSI с Binance
         for i, crypto in enumerate(cryptos):
             print(f"Обработка {crypto['symbol']}...")
             
-            # RSI 2H
-            crypto['rsi_2h'] = get_rsi_2h_yfinance(crypto['symbol'])
-            time.sleep(1)
+            # RSI 2H (берем часовые свечи и группируем)
+            hourly_prices = get_binance_klines(crypto['binance_symbol'], '1h', 100)
+            if hourly_prices is not None and len(hourly_prices) >= 30:
+                # Группируем по 2 часа
+                grouped = hourly_prices.groupby(hourly_prices.index // 2).last()
+                crypto['rsi_2h'] = calculate_rsi(grouped, 14)
+            else:
+                crypto['rsi_2h'] = None
             
-            # Weekly RSI
-            crypto['rsi_weekly'] = get_rsi_yfinance(crypto['symbol'], 90)
-            time.sleep(1)
+            time.sleep(0.5)
             
-            if i < len(cryptos) - 1:
-                time.sleep(2)
+            # RSI Weekly
+            crypto['rsi_weekly'] = get_rsi_binance(crypto['binance_symbol'], '1w', 14)
+            
+            time.sleep(0.5)
                 
         return cryptos
         
@@ -218,9 +296,10 @@ def get_top_cryptos():
         return []
 
 def get_btc_dominance():
+    """BTC Dominance"""
     url = "https://api.coingecko.com/api/v3/global"
     try:
-        time.sleep(2)
+        time.sleep(1)
         response = requests.get(url, timeout=10)
         if response.status_code != 200:
             return None
@@ -236,57 +315,8 @@ def get_btc_dominance():
         print(f"Ошибка получения BTC Dominance: {e}")
         return None
 
-def get_sp500():
-    """S&P 500 из yfinance с улучшенной обработкой"""
-    try:
-        ticker = yf.Ticker("^GSPC")
-        # Получаем последние 5 дней для надежности
-        hist = ticker.history(period="5d")
-        
-        if hist.empty or len(hist) < 1:
-            print("S&P 500: нет данных в истории")
-            return None, None
-            
-        current = hist['Close'].iloc[-1]
-        
-        # Пытаемся найти предыдущее значение
-        if len(hist) >= 2:
-            prev = hist['Close'].iloc[-2]
-            change_24h = ((current - prev) / prev) * 100
-        else:
-            change_24h = 0
-            
-        return round(current, 2), round(change_24h, 2)
-    except Exception as e:
-        print(f"Ошибка получения S&P 500: {e}")
-        return None, None
-
-def get_usd_rub():
-    """USD/RUB из yfinance с улучшенной обработкой"""
-    try:
-        ticker = yf.Ticker("USDRUB=X")
-        # Получаем последние 5 дней
-        hist = ticker.history(period="5d")
-        
-        if hist.empty or len(hist) < 1:
-            print("USD/RUB: нет данных в истории")
-            return None, None
-            
-        current = hist['Close'].iloc[-1]
-        
-        # Пытаемся найти предыдущее значение
-        if len(hist) >= 2:
-            prev = hist['Close'].iloc[-2]
-            change_24h = ((current - prev) / prev) * 100
-        else:
-            change_24h = 0
-            
-        return round(current, 2), round(change_24h, 2)
-    except Exception as e:
-        print(f"Ошибка получения USD/RUB: {e}")
-        return None, None
-
 def get_fear_greed():
+    """Fear & Greed Index"""
     url = "https://api.alternative.me/fng/?limit=0"
     try:
         response = requests.get(url, timeout=10)
@@ -305,7 +335,7 @@ def get_fear_greed():
 def format_message():
     now = datetime.now()
     
-    # Форматирование даты в нужном формате
+    # Форматирование даты
     days_ru = {
         'Monday': 'понедельник',
         'Tuesday': 'вторник',
@@ -331,15 +361,21 @@ def format_message():
     
     message = f"<b>{header}</b>\n\n"
     
-    # S&P 500
-    sp_price, sp_change = get_sp500()
+    # S&P 500 - пробуем разные источники
+    sp_price, sp_change = get_sp500_twelve()
+    if not sp_price:
+        sp_price, sp_change = get_sp500_alphavantage()
+    
     if sp_price:
         message += f"📊 S&P 500: {format_number(sp_price)} {sp_change:+.2f}%\n"
     else:
         message += "📊 S&P 500: Нет данных\n"
 
-    # USD/RUB
-    rub_price, rub_change = get_usd_rub()
+    # USD/RUB - пробуем разные источники
+    rub_price, rub_change = get_usd_rub_cbr()
+    if not rub_price:
+        rub_price, rub_change = get_usd_rub_coingecko()
+    
     if rub_price:
         message += f"💵 USD/RUB: {rub_price:.2f} {rub_change:+.2f}%\n"
     else:
