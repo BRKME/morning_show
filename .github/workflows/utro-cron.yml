@@ -2,7 +2,7 @@ name: Utro
 
 on:
   schedule:
-    - cron: '0 4,6,8,10,12,14,16,18 * * *'  # 7:00 и 19:00 MSK (UTC+3)
+    - cron: '0 4,10,12,16 * * *'  # 7:00 и 19:00 MSK (UTC+3)
   workflow_dispatch:  # Ручной запуск
 
 jobs:
