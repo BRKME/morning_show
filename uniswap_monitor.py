@@ -9,10 +9,13 @@ import random
 BOT_TOKEN = '8442392037:AAEiM_b4QfdFLqbmmc1PXNvA99yxmFVLEp8'
 CHAT_ID = '350766421'
 
-# Список мудростей дня (остается без изменений)
+# Список мудростей дня
 WISDOMS = [
     "Жадность — это чума.",
-    # ... все ваши цитаты
+    "New Day — New Opportunity.",
+    "Ты — раб. Либо своих страхов, либо своей дисциплины.",
+    "Сосредоточься на том, что ты можешь изменить (мысли, действия), а не на внешнем.",
+    "Принятие судьбы (Amor Fati): принимай всё, что происходит, как полезный урок.",
 ]
 
 def get_daily_wisdom():
@@ -97,32 +100,43 @@ def calculate_rsi(prices, period=14):
         print(f"Ошибка расчета RSI: {e}")
         return None
 
-def get_rsi(coin_id, days=30):
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=usd&days={days}&interval=daily"
-    
+def get_rsi_2h_yfinance(symbol):
+    """Получение RSI 2H через yfinance"""
     try:
-        print(f"Запрос RSI для {coin_id}...")
-        response = requests.get(url, timeout=15)
+        ticker_map = {
+            'BTC': 'BTC-USD',
+            'ETH': 'ETH-USD', 
+            'BNB': 'BNB-USD',
+            'SOL': 'SOL-USD'
+        }
         
-        if response.status_code == 200:
-            data = response.json()
-            if 'prices' in data and len(data['prices']) >= 15:
-                prices_df = pd.DataFrame(data['prices'], columns=['timestamp', 'price'])
-                rsi_value = calculate_rsi(prices_df['price'], 14)
-                return rsi_value
-            else:
-                print(f"Недостаточно данных для {coin_id}")
-                return None
-        elif response.status_code == 429:
-            print(f"Rate limit для {coin_id}")
-            time.sleep(10)
-            return None
-        else:
-            print(f"API ошибка для {coin_id}: {response.status_code}")
+        ticker_symbol = ticker_map.get(symbol)
+        if not ticker_symbol:
             return None
             
+        ticker = yf.Ticker(ticker_symbol)
+        # Получаем данные за 5 дней с интервалом 1 час
+        hist = ticker.history(period="5d", interval="1h")
+        
+        if len(hist) < 15:
+            return None
+        
+        # Группируем по 2 часа
+        hist_2h = hist.resample('2H').agg({
+            'Open': 'first',
+            'High': 'max',
+            'Low': 'min',
+            'Close': 'last',
+            'Volume': 'sum'
+        }).dropna()
+        
+        if len(hist_2h) < 15:
+            return None
+            
+        return calculate_rsi(hist_2h['Close'], 14)
+        
     except Exception as e:
-        print(f"Ошибка получения RSI для {coin_id}: {e}")
+        print(f"Ошибка yfinance RSI 2H для {symbol}: {e}")
         return None
 
 def get_rsi_yfinance(symbol, days=30):
@@ -186,18 +200,12 @@ def get_top_cryptos():
         for i, crypto in enumerate(cryptos):
             print(f"Обработка {crypto['symbol']}...")
             
-            # Daily RSI
-            crypto['rsi_daily'] = get_rsi(crypto['id'], 30)
-            if crypto['rsi_daily'] is None:
-                crypto['rsi_daily'] = get_rsi_yfinance(crypto['symbol'], 30)
-                
+            # RSI 2H
+            crypto['rsi_2h'] = get_rsi_2h_yfinance(crypto['symbol'])
             time.sleep(1)
             
             # Weekly RSI
-            crypto['rsi_weekly'] = get_rsi(crypto['id'], 90)
-            if crypto['rsi_weekly'] is None:
-                crypto['rsi_weekly'] = get_rsi_yfinance(crypto['symbol'], 90)
-                
+            crypto['rsi_weekly'] = get_rsi_yfinance(crypto['symbol'], 90)
             time.sleep(1)
             
             if i < len(cryptos) - 1:
@@ -232,12 +240,22 @@ def get_sp500():
     """S&P 500 из yfinance с улучшенной обработкой"""
     try:
         ticker = yf.Ticker("^GSPC")
-        hist = ticker.history(period="2d")
-        if len(hist) < 2:
+        # Получаем последние 5 дней для надежности
+        hist = ticker.history(period="5d")
+        
+        if hist.empty or len(hist) < 1:
+            print("S&P 500: нет данных в истории")
             return None, None
+            
         current = hist['Close'].iloc[-1]
-        prev = hist['Close'].iloc[-2]
-        change_24h = ((current - prev) / prev) * 100
+        
+        # Пытаемся найти предыдущее значение
+        if len(hist) >= 2:
+            prev = hist['Close'].iloc[-2]
+            change_24h = ((current - prev) / prev) * 100
+        else:
+            change_24h = 0
+            
         return round(current, 2), round(change_24h, 2)
     except Exception as e:
         print(f"Ошибка получения S&P 500: {e}")
@@ -246,13 +264,23 @@ def get_sp500():
 def get_usd_rub():
     """USD/RUB из yfinance с улучшенной обработкой"""
     try:
-        ticker = yf.Ticker("RUB=X")
-        hist = ticker.history(period="2d")
-        if len(hist) < 2:
+        ticker = yf.Ticker("USDRUB=X")
+        # Получаем последние 5 дней
+        hist = ticker.history(period="5d")
+        
+        if hist.empty or len(hist) < 1:
+            print("USD/RUB: нет данных в истории")
             return None, None
+            
         current = hist['Close'].iloc[-1]
-        prev = hist['Close'].iloc[-2]
-        change_24h = ((current - prev) / prev) * 100
+        
+        # Пытаемся найти предыдущее значение
+        if len(hist) >= 2:
+            prev = hist['Close'].iloc[-2]
+            change_24h = ((current - prev) / prev) * 100
+        else:
+            change_24h = 0
+            
         return round(current, 2), round(change_24h, 2)
     except Exception as e:
         print(f"Ошибка получения USD/RUB: {e}")
@@ -276,33 +304,44 @@ def get_fear_greed():
 
 def format_message():
     now = datetime.now()
-    weekday_num = now.weekday()
-    days_ru = {0: 'понедельник', 1: 'вторник', 2: 'среда', 3: 'четверг', 4: 'пятница', 5: 'суббота', 6: 'воскресенье'}
-    day_name = days_ru[weekday_num]
-    timestamp = now.strftime('%d.%m.%Y %H:%M')
-    full_date = f"{day_name}, {timestamp}"
-    hour = now.hour
     
-    if hour < 12:
-        greeting = "🌅 Доброе утро!"
-    elif hour < 18:
-        greeting = "☀️ Добрый день!"
-    else:
-        greeting = "🌆 Добрый вечер!"
+    # Форматирование даты в нужном формате
+    days_ru = {
+        'Monday': 'понедельник',
+        'Tuesday': 'вторник',
+        'Wednesday': 'среда',
+        'Thursday': 'четверг',
+        'Friday': 'пятница',
+        'Saturday': 'суббота',
+        'Sunday': 'воскресенье'
+    }
+    months_ru = {
+        1: 'января', 2: 'февраля', 3: 'марта', 4: 'апреля',
+        5: 'мая', 6: 'июня', 7: 'июля', 8: 'августа',
+        9: 'сентября', 10: 'октября', 11: 'ноября', 12: 'декабря'
+    }
     
-    message = f"{greeting} Рынки на {full_date}\n\n"
+    day_name = days_ru.get(now.strftime('%A'), 'день')
+    day_num = now.day
+    month_name = months_ru.get(now.month, '')
+    week_num = now.isocalendar()[1]
+    
+    # Заголовок
+    header = f"#Крипта #Crypto\n{day_name.capitalize()} {day_num} {month_name}, неделя {week_num}"
+    
+    message = f"<b>{header}</b>\n\n"
     
     # S&P 500
     sp_price, sp_change = get_sp500()
     if sp_price:
-        message += f"📊 S&P 500: {format_number(sp_price)} {sp_change:+.0f}%\n"
+        message += f"📊 S&P 500: {format_number(sp_price)} {sp_change:+.2f}%\n"
     else:
         message += "📊 S&P 500: Нет данных\n"
 
     # USD/RUB
     rub_price, rub_change = get_usd_rub()
     if rub_price:
-        message += f"💵 USD/RUB: {rub_price:.2f} {rub_change:+.0f}%\n"
+        message += f"💵 USD/RUB: {rub_price:.2f} {rub_change:+.2f}%\n"
     else:
         message += "💵 USD/RUB: Нет данных\n"
 
@@ -334,12 +373,12 @@ def format_message():
             price_padded = f"${format_number(crypto['price'])}".ljust(max_price_len)
             change_str = f"{crypto['change_24h']:+.0f}%"
             
-            rsi_d_str = f"{crypto['rsi_daily']:.0f}" if crypto['rsi_daily'] is not None else "N/A"
+            rsi_2h_str = f"{crypto['rsi_2h']:.0f}" if crypto['rsi_2h'] is not None else "N/A"
             rsi_w_str = f"{crypto['rsi_weekly']:.0f}" if crypto['rsi_weekly'] is not None else "N/A"
             
-            signal = get_trading_signal(crypto['rsi_daily'], fg_value) if fg_value else "N/A"
+            signal = get_trading_signal(crypto['rsi_2h'], fg_value) if fg_value else "N/A"
             
-            message += f"{change_emoji} {sym_padded}: {price_padded} {change_str} | <code>RSI (1D/W): {rsi_d_str}/{rsi_w_str} {signal}</code>\n"
+            message += f"{change_emoji} {sym_padded}: {price_padded} {change_str} | <code>RSI (2H/W): {rsi_2h_str}/{rsi_w_str} {signal}</code>\n"
     else:
         message += "Нет данных\n"
     
