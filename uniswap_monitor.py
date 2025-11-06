@@ -3,12 +3,13 @@ import pandas as pd
 import time
 from datetime import datetime
 import random
+import yfinance as yf  # pip install yfinance
 
 # Конфиг Telegram
 BOT_TOKEN = '8442392037:AAEiM_b4QfdFLqbmmc1PXNvA99yxmFVLEp8'
 CHAT_ID = '350766421'
 
-# Список мудростей дня (исправлена синтаксическая ошибка в последней строке)
+# Список мудростей дня
 WISDOMS = [
     "Единственный приоритет - защита капитала, только потом умножение. (Без фундамента небоскрёб рухнет.)",
     "Не будь дураком (Проверь: нет ли здесь «быстрой наживы» или сомнительных обещаний)",
@@ -108,86 +109,87 @@ def calculate_rsi(prices, period=14):
         print(f"Ошибка расчета RSI: {e}")
         return None
 
-def get_binance_klines(symbol, interval='1h', limit=100):
-    """Получение свечей с Binance - возвращает список цен закрытия"""
+def get_coingecko_historical(coin_id, days=30, interval='daily'):
+    """Получение исторических цен с CoinGecko - возвращает список цен закрытия"""
     try:
-        url = "https://api.binance.com/api/v3/klines"
+        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
         params = {
-            'symbol': f"{symbol}USDT",
-            'interval': interval,
-            'limit': limit
+            'vs_currency': 'usd',
+            'days': days,
+            'interval': interval
         }
         
-        print(f"Запрос Binance: {symbol}USDT, interval={interval}, limit={limit}")
+        print(f"Запрос CoinGecko: {coin_id}, days={days}, interval={interval}")
         response = requests.get(url, params=params, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
-            # Извлекаем цены закрытия (индекс 4 в каждой свече)
-            prices = [float(candle[4]) for candle in data]
-            print(f"Получено {len(prices)} свечей для {symbol}")
+            # Извлекаем цены (prices: [timestamp, price])
+            prices = [price for timestamp, price in data['prices']]
+            print(f"Получено {len(prices)} цен для {coin_id}")
             return prices
         else:
-            print(f"Ошибка Binance API: {response.status_code} - {response.text[:100]}")
+            print(f"Ошибка CoinGecko API: {response.status_code} - {response.text[:100]}")
             return None
     except Exception as e:
-        print(f"Ошибка Binance для {symbol}: {e}")
+        print(f"Ошибка CoinGecko для {coin_id}: {e}")
         return None
 
-def get_rsi_2h_binance(symbol):
-    """RSI 2H - берем 2-часовые свечи напрямую"""
+def get_rsi_2h_coingecko(coin_id):
+    """RSI 2H - используем hourly данные и resample to 2H"""
     try:
-        # Берем 2h свечи напрямую (Binance поддерживает этот интервал)
-        prices = get_binance_klines(symbol, '2h', 50)
+        # Берем hourly данные за 7 дней (для ~84 hourly points, enough for RSI14 on 2h)
+        hourly_prices = get_coingecko_historical(coin_id, days=7, interval='hourly')
+        if not hourly_prices or len(hourly_prices) < 20:
+            return None
+        
+        # Resample to 2H
+        df = pd.DataFrame({'price': hourly_prices})
+        # Assume timestamps are sequential hourly, generate timestamps for resample
+        start_time = pd.Timestamp.now() - pd.Timedelta(hours=len(hourly_prices))
+        df['timestamp'] = pd.date_range(start=start_time, periods=len(df), freq='H')
+        df.set_index('timestamp', inplace=True)
+        df_2h = df['price'].resample('2H').last().dropna()  # Last price in 2h bin
+        
+        if len(df_2h) < 15:
+            return None
+        
+        rsi = calculate_rsi(df_2h.tolist(), 14)
+        print(f"RSI 2H для {coin_id}: {rsi}")
+        return rsi
+    except Exception as e:
+        print(f"Ошибка RSI 2H для {coin_id}: {e}")
+        return None
+
+def get_rsi_daily_coingecko(coin_id):
+    """RSI Daily - дневные данные"""
+    try:
+        prices = get_coingecko_historical(coin_id, days=50, interval='daily')
         if prices and len(prices) >= 15:
             rsi = calculate_rsi(prices, 14)
-            print(f"RSI 2H для {symbol}: {rsi}")
+            print(f"RSI Daily для {coin_id}: {rsi}")
             return rsi
         return None
     except Exception as e:
-        print(f"Ошибка RSI 2H для {symbol}: {e}")
+        print(f"Ошибка RSI Daily для {coin_id}: {e}")
         return None
 
-def get_rsi_daily_binance(symbol):
-    """RSI Daily - дневные свечи"""
+def get_sp500_yfinance():
+    """S&P 500 через yfinance"""
     try:
-        prices = get_binance_klines(symbol, '1d', 50)
-        if prices and len(prices) >= 15:
-            rsi = calculate_rsi(prices, 14)
-            print(f"RSI Daily для {symbol}: {rsi}")
-            return rsi
-        return None
-    except Exception as e:
-        print(f"Ошибка RSI Daily для {symbol}: {e}")
-        return None
-
-def get_sp500_investing():
-    """S&P 500 через Yahoo Finance (исправлена проверка на 'indicators')"""
-    try:
-        url = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
-        params = {
-            'interval': '1d',
-            'range': '2d'
-        }
+        ticker = yf.Ticker("^GSPC")
+        info = ticker.info
+        current = info.get('regularMarketPrice')
+        prev_close = info.get('previousClose')
         
-        response = requests.get(url, params=params, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
-                result = data['chart']['result'][0]
-                if 'meta' in result:
-                    meta = result['meta']
-                    current = meta.get('regularMarketPrice')
-                    prev_close = meta.get('chartPreviousClose')
-                    
-                    if current and prev_close:
-                        change = ((current - prev_close) / prev_close) * 100
-                        return round(current, 2), round(change, 2)
-        print("Не удалось извлечь данные S&P 500")
+        if current and prev_close:
+            change = ((current - prev_close) / prev_close) * 100
+            print(f"S&P 500: {current}, change: {change:.2f}%")
+            return round(current, 2), round(change, 2)
+        print("Не удалось извлечь данные из yfinance info")
         return None, None
     except Exception as e:
-        print(f"Ошибка S&P 500: {e}")
+        print(f"Ошибка yfinance S&P 500: {e}")
         return None, None
 
 def get_usd_rub_cbr():
@@ -232,7 +234,7 @@ def get_usd_rub_coingecko():
         return None, None
 
 def get_top_cryptos():
-    """Топ-4 крипты с CoinGecko + RSI с Binance (увеличены задержки для rate limits)"""
+    """Топ-4 крипты с CoinGecko + RSI с CoinGecko"""
     url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false&price_change_percentage=24h"
     
     try:
@@ -246,27 +248,27 @@ def get_top_cryptos():
         data = response.json()
         cryptos = []
         
-        # Маппинг для Binance символов
-        binance_map = {
-            'BTC': 'BTC',
-            'ETH': 'ETH',
-            'BNB': 'BNB',
-            'SOL': 'SOL'
+        # Маппинг для CoinGecko IDs
+        coingecko_map = {
+            'BTC': {'symbol': 'BTC', 'id': 'bitcoin'},
+            'ETH': {'symbol': 'ETH', 'id': 'ethereum'},
+            'BNB': {'symbol': 'BNB', 'id': 'binancecoin'},
+            'SOL': {'symbol': 'SOL', 'id': 'solana'}
         }
         
         for coin in data:
             symbol_upper = coin.get('symbol', '').upper()
-            if symbol_upper in ['USDT', 'XRP']:
+            if symbol_upper in ['USDT', 'XRP', 'USDC']:
                 continue
             
-            if symbol_upper not in binance_map:
+            if symbol_upper not in coingecko_map:
                 continue
                 
+            mapped = coingecko_map[symbol_upper]
             cryptos.append({
-                'id': coin.get('id', ''),
+                'id': mapped['id'],
                 'name': coin.get('name', 'Unknown'),
-                'symbol': symbol_upper,
-                'binance_symbol': binance_map[symbol_upper],
+                'symbol': mapped['symbol'],
                 'price': coin.get('current_price', 0),
                 'change_24h': coin.get('price_change_percentage_24h', 0)
             })
@@ -276,17 +278,17 @@ def get_top_cryptos():
         
         print(f"Найдено {len(cryptos)} криптовалют")
         
-        # Получаем RSI с Binance
+        # Получаем RSI с CoinGecko
         for crypto in cryptos:
             print(f"\n--- Обработка {crypto['symbol']} ---")
             
             # RSI 2H
-            crypto['rsi_2h'] = get_rsi_2h_binance(crypto['binance_symbol'])
-            time.sleep(0.5)  # Увеличена задержка
+            crypto['rsi_2h'] = get_rsi_2h_coingecko(crypto['id'])
+            time.sleep(1.0)  # Задержка для rate limit CoinGecko (~50 calls/min)
             
             # RSI Daily
-            crypto['rsi_daily'] = get_rsi_daily_binance(crypto['binance_symbol'])
-            time.sleep(0.5)  # Увеличена задержка
+            crypto['rsi_daily'] = get_rsi_daily_coingecko(crypto['id'])
+            time.sleep(1.0)
                 
         return cryptos
         
@@ -360,7 +362,7 @@ def format_message():
     message = f"<b>{header}</b>\n\n"
     
     # S&P 500
-    sp_price, sp_change = get_sp500_investing()
+    sp_price, sp_change = get_sp500_yfinance()
     
     if sp_price:
         message += f"📊 S&P 500: {format_number(sp_price)} {sp_change:+.2f}%\n"
