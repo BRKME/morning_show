@@ -138,23 +138,23 @@ def get_coingecko_historical(coin_id, days=30, interval='daily'):
 def get_rsi_2h_coingecko(coin_id):
     """RSI 2H - используем hourly данные и resample to 2H"""
     try:
-        # Берем hourly данные за 7 дней (для ~84 hourly points, enough for RSI14 on 2h)
+        # Берем hourly данные за 7 дней (для ~168 hourly points, enough for RSI14 on 2h ~84 points)
         hourly_prices = get_coingecko_historical(coin_id, days=7, interval='hourly')
-        if not hourly_prices or len(hourly_prices) < 20:
+        if not hourly_prices or len(hourly_prices) < 30:  # Increased min for better resample
             return None
         
         # Resample to 2H
         df = pd.DataFrame({'price': hourly_prices})
-        # Assume timestamps are sequential hourly, generate timestamps for resample
-        start_time = pd.Timestamp.now() - pd.Timedelta(hours=len(hourly_prices))
-        df['timestamp'] = pd.date_range(start=start_time, periods=len(df), freq='H')
+        # Generate timestamps: assume last is now, backtrack hourly
+        end_time = datetime.now()
+        df['timestamp'] = pd.date_range(end=end_time, periods=len(df), freq='-1H')[::-1]  # Reverse to ascending
         df.set_index('timestamp', inplace=True)
         df_2h = df['price'].resample('2H').last().dropna()  # Last price in 2h bin
         
         if len(df_2h) < 15:
             return None
         
-        rsi = calculate_rsi(df_2h.tolist(), 14)
+        rsi = calculate_rsi(df_2h, 14)
         print(f"RSI 2H для {coin_id}: {rsi}")
         return rsi
     except Exception as e:
@@ -178,15 +178,14 @@ def get_sp500_yfinance():
     """S&P 500 через yfinance"""
     try:
         ticker = yf.Ticker("^GSPC")
-        info = ticker.info
-        current = info.get('regularMarketPrice')
-        prev_close = info.get('previousClose')
-        
-        if current and prev_close:
+        hist = ticker.history(period="2d")
+        if len(hist) >= 2:
+            current = hist['Close'].iloc[-1]
+            prev_close = hist['Close'].iloc[-2]
             change = ((current - prev_close) / prev_close) * 100
             print(f"S&P 500: {current}, change: {change:.2f}%")
             return round(current, 2), round(change, 2)
-        print("Не удалось извлечь данные из yfinance info")
+        print("Не удалось получить историю из yfinance")
         return None, None
     except Exception as e:
         print(f"Ошибка yfinance S&P 500: {e}")
