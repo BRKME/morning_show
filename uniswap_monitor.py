@@ -135,46 +135,32 @@ def get_coingecko_historical(coin_id, days=30, interval='daily'):
         print(f"Ошибка CoinGecko для {coin_id}: {e}")
         return None
 
-def get_rsi_2h_coingecko(coin_id):
-    """RSI 2H - используем hourly данные и resample to 2H с реальными timestamps"""
+def get_rsi_1h_coingecko(coin_id):
+    """RSI 1H - используем hourly данные напрямую"""
     try:
-        hourly_data = get_coingecko_historical(coin_id, days=7, interval='hourly')
-        if not hourly_data or len(hourly_data) < 30:
+        hourly_data = get_coingecko_historical(coin_id, days=3, interval='hourly')  # 3 days for ~72 points
+        if not hourly_data or len(hourly_data) < 15:
             return None
         
-        timestamps = [pd.to_datetime(pair[0], unit='ms') for pair in hourly_data]
         prices = [pair[1] for pair in hourly_data]
         
-        df = pd.DataFrame({'price': prices}, index=timestamps)
-        df = df.sort_index()
-        df_2h = df['price'].resample('2H').last().dropna()
-        
-        if len(df_2h) < 15:
-            print(f"Мало данных после resample для {coin_id}: {len(df_2h)}")
-            return None
-        
-        rsi = calculate_rsi(df_2h, 14)
-        print(f"RSI 2H для {coin_id}: {rsi}")
+        rsi = calculate_rsi(prices, 14)
+        print(f"RSI 1H для {coin_id}: {rsi}")
         return rsi
     except Exception as e:
-        print(f"Ошибка RSI 2H для {coin_id}: {e}")
+        print(f"Ошибка RSI 1H для {coin_id}: {e}")
         return None
 
 def get_rsi_daily_coingecko(coin_id):
-    """RSI Daily - дневные данные с реальными timestamps (но resample не нужен)"""
+    """RSI Daily - дневные данные"""
     try:
         daily_data = get_coingecko_historical(coin_id, days=50, interval='daily')
         if not daily_data or len(daily_data) < 15:
             return None
         
-        timestamps = [pd.to_datetime(pair[0], unit='ms') for pair in daily_data]
         prices = [pair[1] for pair in daily_data]
         
-        df = pd.DataFrame({'price': prices}, index=timestamps)
-        df = df.sort_index()
-        
-        # Поскольку daily, resample не нужен, но можно проверить на дубли
-        rsi = calculate_rsi(df['price'], 14)
+        rsi = calculate_rsi(prices, 14)
         print(f"RSI Daily для {coin_id}: {rsi}")
         return rsi
     except Exception as e:
@@ -211,7 +197,7 @@ def get_sp500_scrape():
             if price_elem and change_elem:
                 current_str = price_elem.text.replace(',', '')
                 current = float(current_str) if current_str else None
-                ch_str = change_elem.text.strip('() %').replace('%', '')
+                ch_str = change_elem.text.strip('() %').replace('%', '').replace('(', '').replace(')', '')
                 ch = float(ch_str) if ch_str else 0
                 print(f"S&P 500 scrape: {current}, change: {ch:.2f}%")
                 return round(current, 2), round(ch, 2)
@@ -276,11 +262,11 @@ def get_top_cryptos():
         data = response.json()
         cryptos = []
         
-        # Маппинг для CoinGecko IDs (исправлен id для BNB)
+        # Маппинг для CoinGecko IDs
         coingecko_map = {
             'BTC': {'symbol': 'BTC', 'id': 'bitcoin'},
             'ETH': {'symbol': 'ETH', 'id': 'ethereum'},
-            'BNB': {'symbol': 'BNB', 'id': 'bnb'},
+            'BNB': {'symbol': 'BNB', 'id': 'binancecoin'},
             'SOL': {'symbol': 'SOL', 'id': 'solana'}
         }
         
@@ -310,9 +296,9 @@ def get_top_cryptos():
         for crypto in cryptos:
             print(f"\n--- Обработка {crypto['symbol']} ---")
             
-            # RSI 2H
-            crypto['rsi_2h'] = get_rsi_2h_coingecko(crypto['id'])
-            time.sleep(1.5)  # Увеличена задержка для rate limits
+            # RSI 1H
+            crypto['rsi_1h'] = get_rsi_1h_coingecko(crypto['id'])
+            time.sleep(1.5)  # Задержка для rate limits
             
             # RSI Daily
             crypto['rsi_daily'] = get_rsi_daily_coingecko(crypto['id'])
@@ -437,12 +423,12 @@ def format_message():
             price_padded = f"${format_number(crypto['price'])}".ljust(max_price_len)
             change_str = f"{crypto['change_24h']:+.0f}%"
             
-            rsi_2h_str = f"{crypto['rsi_2h']:.0f}" if crypto['rsi_2h'] is not None else "N/A"
+            rsi_1h_str = f"{crypto['rsi_1h']:.0f}" if crypto['rsi_1h'] is not None else "N/A"
             rsi_d_str = f"{crypto['rsi_daily']:.0f}" if crypto['rsi_daily'] is not None else "N/A"
             
-            signal = get_trading_signal(crypto['rsi_2h'], fg_value) if fg_value is not None else "N/A"
+            signal = get_trading_signal(crypto['rsi_1h'], fg_value) if fg_value is not None else "N/A"
             
-            message += f"{change_emoji} {sym_padded}: {price_padded} {change_str} | <code>RSI (2H/D): {rsi_2h_str}/{rsi_d_str} {signal}</code>\n"
+            message += f"{change_emoji} {sym_padded}: {price_padded} {change_str} | <code>RSI (1H/D): {rsi_1h_str}/{rsi_d_str} {signal}</code>\n"
     else:
         message += "Нет данных\n"
     
