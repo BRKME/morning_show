@@ -110,61 +110,60 @@ def calculate_rsi(prices, period=14):
         print(f"Ошибка расчета RSI: {e}")
         return None
 
-def get_coingecko_historical(coin_id, days=30, interval='daily'):
-    """Получение исторических данных с CoinGecko - возвращает list of [timestamp_ms, price]"""
+def get_cryptocompare_historical(symbol, timeframe='hour', limit=100):
+    """Получение исторических цен с CryptoCompare - возвращает list of close prices"""
     try:
-        url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
+        url = f"https://min-api.cryptocompare.com/data/v2/histo{timeframe}"
         params = {
-            'vs_currency': 'usd',
-            'days': days,
-            'interval': interval
+            'fsym': symbol,
+            'tsym': 'USD',
+            'limit': limit
         }
         
-        print(f"Запрос CoinGecko: {coin_id}, days={days}, interval={interval}")
+        print(f"Запрос CryptoCompare: {symbol}, timeframe={timeframe}, limit={limit}")
         response = requests.get(url, params=params, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
-            historical_data = data.get('prices', [])
-            print(f"Получено {len(historical_data)} записей для {coin_id}")
-            return historical_data
+            if data['Response'] == 'Success' and 'Data' in data and 'Data' in data['Data']:
+                historical = data['Data']['Data']
+                prices = [candle['close'] for candle in historical if candle['close'] > 0]
+                print(f"Получено {len(prices)} цен для {symbol}")
+                return prices
+            else:
+                print(f"Ошибка данных CryptoCompare для {symbol}")
+                return None
         else:
-            print(f"Ошибка CoinGecko API: {response.status_code} - {response.text[:100]}")
+            print(f"Ошибка CryptoCompare API: {response.status_code} - {response.text[:100]}")
             return None
     except Exception as e:
-        print(f"Ошибка CoinGecko для {coin_id}: {e}")
+        print(f"Ошибка CryptoCompare для {symbol}: {e}")
         return None
 
-def get_rsi_1h_coingecko(coin_id):
-    """RSI 1H - используем hourly данные напрямую"""
+def get_rsi_1h_cryptocompare(symbol):
+    """RSI 1H с CryptoCompare hourly"""
     try:
-        hourly_data = get_coingecko_historical(coin_id, days=3, interval='hourly')  # 3 days for ~72 points
-        if not hourly_data or len(hourly_data) < 15:
-            return None
-        
-        prices = [pair[1] for pair in hourly_data]
-        
-        rsi = calculate_rsi(prices, 14)
-        print(f"RSI 1H для {coin_id}: {rsi}")
-        return rsi
+        prices = get_cryptocompare_historical(symbol, timeframe='hour', limit=100)
+        if prices and len(prices) >= 15:
+            rsi = calculate_rsi(prices, 14)
+            print(f"RSI 1H для {symbol}: {rsi}")
+            return rsi
+        return None
     except Exception as e:
-        print(f"Ошибка RSI 1H для {coin_id}: {e}")
+        print(f"Ошибка RSI 1H для {symbol}: {e}")
         return None
 
-def get_rsi_daily_coingecko(coin_id):
-    """RSI Daily - дневные данные"""
+def get_rsi_daily_cryptocompare(symbol):
+    """RSI Daily с CryptoCompare daily"""
     try:
-        daily_data = get_coingecko_historical(coin_id, days=50, interval='daily')
-        if not daily_data or len(daily_data) < 15:
-            return None
-        
-        prices = [pair[1] for pair in daily_data]
-        
-        rsi = calculate_rsi(prices, 14)
-        print(f"RSI Daily для {coin_id}: {rsi}")
-        return rsi
+        prices = get_cryptocompare_historical(symbol, timeframe='day', limit=50)
+        if prices and len(prices) >= 15:
+            rsi = calculate_rsi(prices, 14)
+            print(f"RSI Daily для {symbol}: {rsi}")
+            return rsi
+        return None
     except Exception as e:
-        print(f"Ошибка RSI Daily для {coin_id}: {e}")
+        print(f"Ошибка RSI Daily для {symbol}: {e}")
         return None
 
 def get_sp500_yfinance():
@@ -248,7 +247,7 @@ def get_usd_rub_coingecko():
         return None, None
 
 def get_top_cryptos():
-    """Топ-4 крипты с CoinGecko + RSI с CoinGecko"""
+    """Топ-4 крипты с CoinGecko + RSI с CryptoCompare"""
     url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false&price_change_percentage=24h"
     
     try:
@@ -262,12 +261,12 @@ def get_top_cryptos():
         data = response.json()
         cryptos = []
         
-        # Маппинг для CoinGecko IDs
-        coingecko_map = {
-            'BTC': {'symbol': 'BTC', 'id': 'bitcoin'},
-            'ETH': {'symbol': 'ETH', 'id': 'ethereum'},
-            'BNB': {'symbol': 'BNB', 'id': 'binancecoin'},
-            'SOL': {'symbol': 'SOL', 'id': 'solana'}
+        # Маппинг для символов (для CryptoCompare: BTC, ETH, BNB, SOL)
+        symbol_map = {
+            'BTC': 'BTC',
+            'ETH': 'ETH',
+            'BNB': 'BNB',
+            'SOL': 'SOL'
         }
         
         for coin in data:
@@ -275,14 +274,11 @@ def get_top_cryptos():
             if symbol_upper in ['USDT', 'XRP', 'USDC']:
                 continue
             
-            if symbol_upper not in coingecko_map:
+            if symbol_upper not in symbol_map:
                 continue
                 
-            mapped = coingecko_map[symbol_upper]
             cryptos.append({
-                'id': mapped['id'],
-                'name': coin.get('name', 'Unknown'),
-                'symbol': mapped['symbol'],
+                'symbol': symbol_upper,
                 'price': coin.get('current_price', 0),
                 'change_24h': coin.get('price_change_percentage_24h', 0)
             })
@@ -292,17 +288,17 @@ def get_top_cryptos():
         
         print(f"Найдено {len(cryptos)} криптовалют")
         
-        # Получаем RSI с CoinGecko
+        # Получаем RSI с CryptoCompare
         for crypto in cryptos:
             print(f"\n--- Обработка {crypto['symbol']} ---")
             
             # RSI 1H
-            crypto['rsi_1h'] = get_rsi_1h_coingecko(crypto['id'])
-            time.sleep(1.5)  # Задержка для rate limits
+            crypto['rsi_1h'] = get_rsi_1h_cryptocompare(crypto['symbol'])
+            time.sleep(0.5)  # Меньшая задержка, CryptoCompare liberal limits
             
             # RSI Daily
-            crypto['rsi_daily'] = get_rsi_daily_coingecko(crypto['id'])
-            time.sleep(1.5)
+            crypto['rsi_daily'] = get_rsi_daily_cryptocompare(crypto['symbol'])
+            time.sleep(0.5)
                 
         return cryptos
         
@@ -426,7 +422,9 @@ def format_message():
             rsi_1h_str = f"{crypto['rsi_1h']:.0f}" if crypto['rsi_1h'] is not None else "N/A"
             rsi_d_str = f"{crypto['rsi_daily']:.0f}" if crypto['rsi_daily'] is not None else "N/A"
             
-            signal = get_trading_signal(crypto['rsi_1h'], fg_value) if fg_value is not None else "N/A"
+            # Используем rsi_1h для сигнала, fallback на rsi_daily
+            signal_rsi = crypto['rsi_1h'] if crypto['rsi_1h'] is not None else crypto['rsi_daily']
+            signal = get_trading_signal(signal_rsi, fg_value) if fg_value is not None else "N/A"
             
             message += f"{change_emoji} {sym_padded}: {price_padded} {change_str} | <code>RSI (1H/D): {rsi_1h_str}/{rsi_d_str} {signal}</code>\n"
     else:
