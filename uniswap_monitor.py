@@ -4,6 +4,7 @@ import time
 from datetime import datetime
 import random
 import yfinance as yf  # pip install yfinance
+from bs4 import BeautifulSoup  # pip install beautifulsoup4
 
 # Конфиг Telegram
 BOT_TOKEN = '8442392037:AAEiM_b4QfdFLqbmmc1PXNvA99yxmFVLEp8'
@@ -110,7 +111,7 @@ def calculate_rsi(prices, period=14):
         return None
 
 def get_coingecko_historical(coin_id, days=30, interval='daily'):
-    """Получение исторических цен с CoinGecko - возвращает список цен закрытия"""
+    """Получение исторических данных с CoinGecko - возвращает list of [timestamp_ms, price]"""
     try:
         url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart"
         params = {
@@ -124,10 +125,9 @@ def get_coingecko_historical(coin_id, days=30, interval='daily'):
         
         if response.status_code == 200:
             data = response.json()
-            # Извлекаем цены (prices: [timestamp, price])
-            prices = [price for timestamp, price in data['prices']]
-            print(f"Получено {len(prices)} цен для {coin_id}")
-            return prices
+            historical_data = data.get('prices', [])
+            print(f"Получено {len(historical_data)} записей для {coin_id}")
+            return historical_data
         else:
             print(f"Ошибка CoinGecko API: {response.status_code} - {response.text[:100]}")
             return None
@@ -136,22 +136,21 @@ def get_coingecko_historical(coin_id, days=30, interval='daily'):
         return None
 
 def get_rsi_2h_coingecko(coin_id):
-    """RSI 2H - используем hourly данные и resample to 2H"""
+    """RSI 2H - используем hourly данные и resample to 2H с реальными timestamps"""
     try:
-        # Берем hourly данные за 7 дней (для ~168 hourly points, enough for RSI14 on 2h ~84 points)
-        hourly_prices = get_coingecko_historical(coin_id, days=7, interval='hourly')
-        if not hourly_prices or len(hourly_prices) < 30:  # Increased min for better resample
+        hourly_data = get_coingecko_historical(coin_id, days=7, interval='hourly')
+        if not hourly_data or len(hourly_data) < 30:
             return None
         
-        # Resample to 2H
-        df = pd.DataFrame({'price': hourly_prices})
-        # Generate timestamps: assume last is now, backtrack hourly
-        end_time = datetime.now()
-        df['timestamp'] = pd.date_range(end=end_time, periods=len(df), freq='-1H')[::-1]  # Reverse to ascending
-        df.set_index('timestamp', inplace=True)
-        df_2h = df['price'].resample('2H').last().dropna()  # Last price in 2h bin
+        timestamps = [pd.to_datetime(pair[0], unit='ms') for pair in hourly_data]
+        prices = [pair[1] for pair in hourly_data]
+        
+        df = pd.DataFrame({'price': prices}, index=timestamps)
+        df = df.sort_index()
+        df_2h = df['price'].resample('2H').last().dropna()
         
         if len(df_2h) < 15:
+            print(f"Мало данных после resample для {coin_id}: {len(df_2h)}")
             return None
         
         rsi = calculate_rsi(df_2h, 14)
@@ -162,14 +161,22 @@ def get_rsi_2h_coingecko(coin_id):
         return None
 
 def get_rsi_daily_coingecko(coin_id):
-    """RSI Daily - дневные данные"""
+    """RSI Daily - дневные данные с реальными timestamps (но resample не нужен)"""
     try:
-        prices = get_coingecko_historical(coin_id, days=50, interval='daily')
-        if prices and len(prices) >= 15:
-            rsi = calculate_rsi(prices, 14)
-            print(f"RSI Daily для {coin_id}: {rsi}")
-            return rsi
-        return None
+        daily_data = get_coingecko_historical(coin_id, days=50, interval='daily')
+        if not daily_data or len(daily_data) < 15:
+            return None
+        
+        timestamps = [pd.to_datetime(pair[0], unit='ms') for pair in daily_data]
+        prices = [pair[1] for pair in daily_data]
+        
+        df = pd.DataFrame({'price': prices}, index=timestamps)
+        df = df.sort_index()
+        
+        # Поскольку daily, resample не нужен, но можно проверить на дубли
+        rsi = calculate_rsi(df['price'], 14)
+        print(f"RSI Daily для {coin_id}: {rsi}")
+        return rsi
     except Exception as e:
         print(f"Ошибка RSI Daily для {coin_id}: {e}")
         return None
@@ -183,12 +190,34 @@ def get_sp500_yfinance():
             current = hist['Close'].iloc[-1]
             prev_close = hist['Close'].iloc[-2]
             change = ((current - prev_close) / prev_close) * 100
-            print(f"S&P 500: {current}, change: {change:.2f}%")
+            print(f"S&P 500 yfinance: {current}, change: {change:.2f}%")
             return round(current, 2), round(change, 2)
         print("Не удалось получить историю из yfinance")
         return None, None
     except Exception as e:
         print(f"Ошибка yfinance S&P 500: {e}")
+        return None, None
+
+def get_sp500_scrape():
+    """Fallback scraping S&P 500 с Yahoo Finance"""
+    try:
+        url = "https://finance.yahoo.com/quote/%5EGSPC"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            price_elem = soup.find('fin-streamer', {'data-symbol': '^GSPC', 'data-field': 'regularMarketPrice'})
+            change_elem = soup.find('fin-streamer', {'data-symbol': '^GSPC', 'data-field': 'regularMarketChangePercent'})
+            if price_elem and change_elem:
+                current_str = price_elem.text.replace(',', '')
+                current = float(current_str) if current_str else None
+                ch_str = change_elem.text.strip('() %').replace('%', '')
+                ch = float(ch_str) if ch_str else 0
+                print(f"S&P 500 scrape: {current}, change: {ch:.2f}%")
+                return round(current, 2), round(ch, 2)
+        return None, None
+    except Exception as e:
+        print(f"Ошибка scraping S&P 500: {e}")
         return None, None
 
 def get_usd_rub_cbr():
@@ -247,11 +276,11 @@ def get_top_cryptos():
         data = response.json()
         cryptos = []
         
-        # Маппинг для CoinGecko IDs
+        # Маппинг для CoinGecko IDs (исправлен id для BNB)
         coingecko_map = {
             'BTC': {'symbol': 'BTC', 'id': 'bitcoin'},
             'ETH': {'symbol': 'ETH', 'id': 'ethereum'},
-            'BNB': {'symbol': 'BNB', 'id': 'binancecoin'},
+            'BNB': {'symbol': 'BNB', 'id': 'bnb'},
             'SOL': {'symbol': 'SOL', 'id': 'solana'}
         }
         
@@ -283,11 +312,11 @@ def get_top_cryptos():
             
             # RSI 2H
             crypto['rsi_2h'] = get_rsi_2h_coingecko(crypto['id'])
-            time.sleep(1.0)  # Задержка для rate limit CoinGecko (~50 calls/min)
+            time.sleep(1.5)  # Увеличена задержка для rate limits
             
             # RSI Daily
             crypto['rsi_daily'] = get_rsi_daily_coingecko(crypto['id'])
-            time.sleep(1.0)
+            time.sleep(1.5)
                 
         return cryptos
         
@@ -360,8 +389,10 @@ def format_message():
     
     message = f"<b>{header}</b>\n\n"
     
-    # S&P 500
+    # S&P 500 with fallback
     sp_price, sp_change = get_sp500_yfinance()
+    if not sp_price:
+        sp_price, sp_change = get_sp500_scrape()
     
     if sp_price:
         message += f"📊 S&P 500: {format_number(sp_price)} {sp_change:+.2f}%\n"
