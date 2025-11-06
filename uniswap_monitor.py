@@ -12,9 +12,9 @@ CHAT_ID = '350766421'
 
 # Список мудростей дня
 WISDOMS = [
-    """Когда цена растет, ты жалеешь, что не купил больше.
+  """Когда цена растет, ты жалеешь, что не купил больше.
      Когда цена падает, ты ненавидишь быть в минусе.
-     Когда цена идет вбок, тебе безумно скучно. Прими эту боль"""
+     Когда цена идет вбок, тебе безумно скучно. Прими эту боль. Крипта SCAM"""
 ]
 
 def get_daily_wisdom():
@@ -48,15 +48,15 @@ def get_trading_signal(rsi, fear_greed_index):
             rsi_cat = 'over_70'
         
         if fear_greed_index < 25:
-            fg_cat = 'extreme_fear'
+            fg_cat = 'EXTREME_FEAR'
         elif 25 <= fear_greed_index <= 45:
-            fg_cat = 'fear'
+            fg_cat = 'FEAR'
         elif 45 < fear_greed_index < 55:
-            fg_cat = 'neutral'
+            fg_cat = 'NEUTRAL'
         elif 55 <= fear_greed_index <= 75:
-            fg_cat = 'greed'
+            fg_cat = 'GREED'
         else:
-            fg_cat = 'extreme_greed'
+            fg_cat = 'EXTREME_GREED'
         
         matrix = {
             'extreme_fear': {
