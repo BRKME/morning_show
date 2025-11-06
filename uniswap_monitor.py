@@ -8,13 +8,13 @@ import random
 BOT_TOKEN = '8442392037:AAEiM_b4QfdFLqbmmc1PXNvA99yxmFVLEp8'
 CHAT_ID = '350766421'
 
-# Список мудростей дня
+# Список мудростей дня (исправлена синтаксическая ошибка в последней строке)
 WISDOMS = [
-"Единственный приоритет - защита капитала, только потом умножение. ( Без фундамента небоскрёб рухнет.)",
-"Не будь дураком ( Проверь: нет ли здесь «быстрой наживы» или сомнительных обещаний )",
-"Играй в долгую  (Мои инвестиции соответствует моему плану на годы, а не на день.)",
-"Дисциплина > эмоции ( Решение всегда основано на стратегии, а не на страхе или жадности.)",
-"Риски под контролем» ( Я понимаю, что могу потерять, и готов к этому." 
+    "Единственный приоритет - защита капитала, только потом умножение. (Без фундамента небоскрёб рухнет.)",
+    "Не будь дураком (Проверь: нет ли здесь «быстрой наживы» или сомнительных обещаний)",
+    "Играй в долгую (Мои инвестиции соответствует моему плану на годы, а не на день.)",
+    "Дисциплина > эмоции (Решение всегда основано на стратегии, а не на страхе или жадности.)",
+    "Риски под контролем (Я понимаю, что могу потерять, и готов к этому.)"
 ]
 
 def get_daily_wisdom():
@@ -128,7 +128,7 @@ def get_binance_klines(symbol, interval='1h', limit=100):
             print(f"Получено {len(prices)} свечей для {symbol}")
             return prices
         else:
-            print(f"Ошибка Binance API: {response.status_code}")
+            print(f"Ошибка Binance API: {response.status_code} - {response.text[:100]}")
             return None
     except Exception as e:
         print(f"Ошибка Binance для {symbol}: {e}")
@@ -162,9 +162,8 @@ def get_rsi_daily_binance(symbol):
         return None
 
 def get_sp500_investing():
-    """S&P 500 через Investing.com API (неофициальный но работает)"""
+    """S&P 500 через Yahoo Finance (исправлена проверка на 'indicators')"""
     try:
-        # Используем публичный API который парсит Investing.com
         url = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
         params = {
             'interval': '1d',
@@ -175,9 +174,9 @@ def get_sp500_investing():
         
         if response.status_code == 200:
             data = response.json()
-            if 'chart' in data and 'result' in data['chart']:
+            if 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
                 result = data['chart']['result'][0]
-                if 'meta' in result and 'indicators' in result:
+                if 'meta' in result:
                     meta = result['meta']
                     current = meta.get('regularMarketPrice')
                     prev_close = meta.get('chartPreviousClose')
@@ -185,6 +184,7 @@ def get_sp500_investing():
                     if current and prev_close:
                         change = ((current - prev_close) / prev_close) * 100
                         return round(current, 2), round(change, 2)
+        print("Не удалось извлечь данные S&P 500")
         return None, None
     except Exception as e:
         print(f"Ошибка S&P 500: {e}")
@@ -232,7 +232,7 @@ def get_usd_rub_coingecko():
         return None, None
 
 def get_top_cryptos():
-    """Топ-4 крипты с CoinGecko + RSI с Binance"""
+    """Топ-4 крипты с CoinGecko + RSI с Binance (увеличены задержки для rate limits)"""
     url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false&price_change_percentage=24h"
     
     try:
@@ -282,11 +282,11 @@ def get_top_cryptos():
             
             # RSI 2H
             crypto['rsi_2h'] = get_rsi_2h_binance(crypto['binance_symbol'])
-            time.sleep(0.3)
+            time.sleep(0.5)  # Увеличена задержка
             
             # RSI Daily
             crypto['rsi_daily'] = get_rsi_daily_binance(crypto['binance_symbol'])
-            time.sleep(0.3)
+            time.sleep(0.5)  # Увеличена задержка
                 
         return cryptos
         
@@ -408,7 +408,7 @@ def format_message():
             rsi_2h_str = f"{crypto['rsi_2h']:.0f}" if crypto['rsi_2h'] is not None else "N/A"
             rsi_d_str = f"{crypto['rsi_daily']:.0f}" if crypto['rsi_daily'] is not None else "N/A"
             
-            signal = get_trading_signal(crypto['rsi_2h'], fg_value) if fg_value else "N/A"
+            signal = get_trading_signal(crypto['rsi_2h'], fg_value) if fg_value is not None else "N/A"
             
             message += f"{change_emoji} {sym_padded}: {price_padded} {change_str} | <code>RSI (2H/D): {rsi_2h_str}/{rsi_d_str} {signal}</code>\n"
     else:
@@ -431,6 +431,7 @@ def send_telegram_message():
         response = requests.post(url, data=payload, timeout=10)
         if response.status_code == 200:
             print("Сообщение отправлено успешно!")
+            print(f"Отправленное сообщение:\n{message[:500]}...")  # Лог для отладки
         else:
             print(f"Ошибка отправки: {response.status_code} - {response.text}")
     except Exception as e:
