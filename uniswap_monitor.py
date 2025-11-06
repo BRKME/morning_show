@@ -48,15 +48,15 @@ def get_trading_signal(rsi, fear_greed_index):
             rsi_cat = 'over_70'
         
         if fear_greed_index < 25:
-            fg_cat = 'EXTREME_FEAR'
+            fg_cat = 'extreme_fear'
         elif 25 <= fear_greed_index <= 45:
-            fg_cat = 'FEAR'
+            fg_cat = 'fear'
         elif 45 < fear_greed_index < 55:
-            fg_cat = 'NEUTRAL'
+            fg_cat = 'neutral'
         elif 55 <= fear_greed_index <= 75:
-            fg_cat = 'GREED'
+            fg_cat = 'greed'
         else:
-            fg_cat = 'EXTREME_GREED'
+            fg_cat = 'extreme_greed'
         
         matrix = {
             'extreme_fear': {
