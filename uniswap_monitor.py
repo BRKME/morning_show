@@ -60,19 +60,39 @@ def get_trading_signal(rsi, fear_greed_index):
         
         matrix = {
             'extreme_fear': {
-                'under_30': 'STRONG BUY', '30_45': 'STRONG BUY', '45_55': 'BUY', '55_70': 'NEUTRAL', 'over_70': 'NEUTRAL'
+                'under_30': 'STRONG BUY',
+                '30_45': 'STRONG BUY',
+                '45_55': 'BUY',
+                '55_70': 'NEUTRAL',
+                'over_70': 'NEUTRAL'
             },
             'fear': {
-                'under_30': 'STRONG BUY', '30_45': 'BUY', '45_55': 'NEUTRAL', '55_70': 'NEUTRAL', 'over_70': 'SELL'
+                'under_30': 'STRONG BUY',
+                '30_45': 'BUY',
+                '45_55': 'NEUTRAL',
+                '55_70': 'NEUTRAL',
+                'over_70': 'SELL'
             },
             'neutral': {
-                'under_30': 'BUY', '30_45': 'NEUTRAL', '45_55': 'NEUTRAL', '55_70': 'NEUTRAL', 'over_70': 'SELL'
+                'under_30': 'BUY',
+                '30_45': 'NEUTRAL',
+                '45_55': 'NEUTRAL',
+                '55_70': 'NEUTRAL',
+                'over_70': 'SELL'
             },
             'greed': {
-                'under_30': 'NEUTRAL', '30_45': 'NEUTRAL', '45_55': 'NEUTRAL', '55_70': 'SELL', 'over_70': 'STRONG SELL'
+                'under_30': 'NEUTRAL',
+                '30_45': 'NEUTRAL',
+                '45_55': 'NEUTRAL',
+                '55_70': 'SELL',
+                'over_70': 'STRONG SELL'
             },
             'extreme_greed': {
-                'under_30': 'NEUTRAL', '30_45': 'SELL', '45_55': 'SELL', '55_70': 'STRONG SELL', 'over_70': 'STRONG SELL'
+                'under_30': 'NEUTRAL',
+                '30_45': 'SELL',
+                '45_55': 'SELL',
+                '55_70': 'STRONG SELL',
+                'over_70': 'STRONG SELL'
             }
         }
         
@@ -109,7 +129,7 @@ def calculate_rsi(prices, period=14):
         return None
 
 def get_cryptocompare_historical(symbol, timeframe='hour', limit=100):
-    """Получение исторических цен с CryptoCompare - возвращает list of close prices"""
+    """Получение исторических цен с CryptoCompare"""
     try:
         url = f"https://min-api.cryptocompare.com/data/v2/histo{timeframe}"
         params = {
@@ -118,21 +138,23 @@ def get_cryptocompare_historical(symbol, timeframe='hour', limit=100):
             'limit': limit
         }
         
-        print(f"Запрос CryptoCompare: {symbol}, timeframe={timeframe}, limit={limit}")
+        print(f"Запрос CryptoCompare: {symbol}, timeframe={timeframe}")
         response = requests.get(url, params=params, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
-            if data['Response'] == 'Success' and 'Data' in data and 'Data' in data['Data']:
+            if (data['Response'] == 'Success' and
+                    'Data' in data and 'Data' in data['Data']):
                 historical = data['Data']['Data']
-                prices = [candle['close'] for candle in historical if candle['close'] > 0]
+                prices = [candle['close'] for candle in historical
+                          if candle['close'] > 0]
                 print(f"Получено {len(prices)} цен для {symbol}")
                 return prices
             else:
                 print(f"Ошибка данных CryptoCompare для {symbol}")
                 return None
         else:
-            print(f"Ошибка CryptoCompare API: {response.status_code} - {response.text[:100]}")
+            print(f"Ошибка CryptoCompare API: {response.status_code}")
             return None
     except Exception as e:
         print(f"Ошибка CryptoCompare для {symbol}: {e}")
@@ -141,7 +163,8 @@ def get_cryptocompare_historical(symbol, timeframe='hour', limit=100):
 def get_rsi_1h_cryptocompare(symbol):
     """RSI 1H с CryptoCompare hourly"""
     try:
-        prices = get_cryptocompare_historical(symbol, timeframe='hour', limit=100)
+        prices = get_cryptocompare_historical(symbol, timeframe='hour',
+                                             limit=100)
         if prices and len(prices) >= 15:
             rsi = calculate_rsi(prices, 14)
             print(f"RSI 1H для {symbol}: {rsi}")
@@ -154,7 +177,8 @@ def get_rsi_1h_cryptocompare(symbol):
 def get_rsi_daily_cryptocompare(symbol):
     """RSI Daily с CryptoCompare daily"""
     try:
-        prices = get_cryptocompare_historical(symbol, timeframe='day', limit=50)
+        prices = get_cryptocompare_historical(symbol, timeframe='day',
+                                             limit=50)
         if prices and len(prices) >= 15:
             rsi = calculate_rsi(prices, 14)
             print(f"RSI Daily для {symbol}: {rsi}")
@@ -185,16 +209,27 @@ def get_sp500_scrape():
     """Fallback scraping S&P 500 с Yahoo Finance"""
     try:
         url = "https://finance.yahoo.com/quote/%5EGSPC"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        }
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
-            price_elem = soup.find('fin-streamer', {'data-symbol': '^GSPC', 'data-field': 'regularMarketPrice'})
-            change_elem = soup.find('fin-streamer', {'data-symbol': '^GSPC', 'data-field': 'regularMarketChangePercent'})
+            price_elem = soup.find(
+                'fin-streamer',
+                {'data-symbol': '^GSPC',
+                 'data-field': 'regularMarketPrice'}
+            )
+            change_elem = soup.find(
+                'fin-streamer',
+                {'data-symbol': '^GSPC',
+                 'data-field': 'regularMarketChangePercent'}
+            )
             if price_elem and change_elem:
                 current_str = price_elem.text.replace(',', '')
                 current = float(current_str) if current_str else None
-                ch_str = change_elem.text.strip('() %').replace('%', '').replace('(', '').replace(')', '')
+                ch_str = (change_elem.text.strip('() %')
+                         .replace('%', '').replace('(', '').replace(')', ''))
                 ch = float(ch_str) if ch_str else 0
                 print(f"S&P 500 scrape: {current}, change: {ch:.2f}%")
                 return round(current, 2), round(ch, 2)
@@ -246,7 +281,11 @@ def get_usd_rub_coingecko():
 
 def get_top_cryptos():
     """Топ-4 крипты с CoinGecko + RSI с CryptoCompare"""
-    url = "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=10&page=1&sparkline=false&price_change_percentage=24h"
+    url = (
+        "https://api.coingecko.com/api/v3/coins/markets?"
+        "vs_currency=usd&order=market_cap_desc&per_page=10&page=1&"
+        "sparkline=false&price_change_percentage=24h"
+    )
     
     try:
         print("Получение топ криптовалют...")
@@ -259,7 +298,7 @@ def get_top_cryptos():
         data = response.json()
         cryptos = []
         
-        # Маппинг для символов (для CryptoCompare: BTC, ETH, BNB, SOL)
+        # Маппинг для символов
         symbol_map = {
             'BTC': 'BTC',
             'ETH': 'ETH',
@@ -292,10 +331,12 @@ def get_top_cryptos():
             
             # RSI 1H
             crypto['rsi_1h'] = get_rsi_1h_cryptocompare(crypto['symbol'])
-            time.sleep(0.5)  # Меньшая задержка, CryptoCompare liberal limits
+            time.sleep(0.5)
             
             # RSI Daily
-            crypto['rsi_daily'] = get_rsi_daily_cryptocompare(crypto['symbol'])
+            crypto['rsi_daily'] = get_rsi_daily_cryptocompare(
+                crypto['symbol']
+            )
             time.sleep(0.5)
                 
         return cryptos
@@ -335,7 +376,9 @@ def get_fear_greed():
             return None, None, None
         latest = data['data'][0]
         value_change = latest.get('value_change_percent', 0)
-        return float(latest.get('value', 0)), latest.get('value_classification', 'Unknown'), value_change
+        return (float(latest.get('value', 0)),
+                latest.get('value_classification', 'Unknown'),
+                value_change)
     except Exception as e:
         print(f"Ошибка получения Fear & Greed: {e}")
         return None, None, None
@@ -365,9 +408,11 @@ def format_message():
     week_num = now.isocalendar()[1]
     
     # Заголовок
-    header = f"#Крипта #Crypto\n{day_name.capitalize()} {day_num} {month_name}, неделя {week_num}"
+    header = (f"#Крипта #Crypto\n{day_name.capitalize()} {day_num} "
+              f"{month_name}, неделя {week_num}")
     
-    message = f"<b>{header}</b>\n\n"
+    # Основной контент (в spoiler)
+    main_content = f"<b>{header}</b>\n\n"
     
     # S&P 500 with fallback
     sp_price, sp_change = get_sp500_yfinance()
@@ -375,9 +420,10 @@ def format_message():
         sp_price, sp_change = get_sp500_scrape()
     
     if sp_price:
-        message += f"📊 S&P 500: {format_number(sp_price)} {sp_change:+.2f}%\n"
+        main_content += (f"📊 S&P 500: {format_number(sp_price)} "
+                        f"{sp_change:+.2f}%\n")
     else:
-        message += "📊 S&P 500: Нет данных\n"
+        main_content += "📊 S&P 500: Нет данных\n"
 
     # USD/RUB
     rub_price, rub_change = get_usd_rub_cbr()
@@ -385,51 +431,65 @@ def format_message():
         rub_price, rub_change = get_usd_rub_coingecko()
     
     if rub_price:
-        message += f"💵 USD/RUB: {rub_price:.2f} {rub_change:+.2f}%\n"
+        main_content += f"💵 USD/RUB: {rub_price:.2f} {rub_change:+.2f}%\n"
     else:
-        message += "💵 USD/RUB: Нет данных\n"
+        main_content += "💵 USD/RUB: Нет данных\n"
 
     # Fear & Greed
     fg_value, fg_class, fg_change = get_fear_greed()
     if fg_value:
-        message += f"😱 Crypto Fear & Greed: {fg_value:.0f} ({fg_class})\n"
+        main_content += (f"😱 Crypto Fear & Greed: {fg_value:.0f} "
+                        f"({fg_class})\n")
     else:
-        message += "😱 Crypto Fear & Greed: Нет данных\n"
+        main_content += "😱 Crypto Fear & Greed: Нет данных\n"
 
     # BTC Dominance
     btc_dom = get_btc_dominance()
     if btc_dom:
-        message += f"₿ BTC Dominance: {btc_dom:.0f}%\n\n"
+        main_content += f"₿ BTC Dominance: {btc_dom:.0f}%\n\n"
     else:
-        message += "₿ BTC Dominance: Нет данных\n\n"
+        main_content += "₿ BTC Dominance: Нет данных\n\n"
 
     # Топ-4 крипто + RSI
     cryptos = get_top_cryptos()
-    message += "📈 Топ Крипто (USD):\n\n"
+    main_content += "📈 Топ Крипто (USD):\n\n"
     
     if cryptos:
         max_sym_len = max(len(c['symbol']) for c in cryptos) + 1
-        max_price_len = max(len(f"${format_number(c['price'])}") for c in cryptos)
+        max_price_len = max(
+            len(f"${format_number(c['price'])}") for c in cryptos
+        )
         
         for crypto in cryptos:
             change_emoji = "🟢" if crypto['change_24h'] >= 0 else "🔴"
             sym_padded = f"{crypto['symbol']} ".ljust(max_sym_len)
-            price_padded = f"${format_number(crypto['price'])}".ljust(max_price_len)
+            price_padded = (f"${format_number(crypto['price'])}"
+                           .ljust(max_price_len))
             change_str = f"{crypto['change_24h']:+.0f}%"
             
-            rsi_1h_str = f"{crypto['rsi_1h']:.0f}" if crypto['rsi_1h'] is not None else "N/A"
-            rsi_d_str = f"{crypto['rsi_daily']:.0f}" if crypto['rsi_daily'] is not None else "N/A"
+            rsi_1h_str = (f"{crypto['rsi_1h']:.0f}"
+                         if crypto['rsi_1h'] is not None else "N/A")
+            rsi_d_str = (f"{crypto['rsi_daily']:.0f}"
+                        if crypto['rsi_daily'] is not None else "N/A")
             
             # Используем rsi_1h для сигнала, fallback на rsi_daily
-            signal_rsi = crypto['rsi_1h'] if crypto['rsi_1h'] is not None else crypto['rsi_daily']
-            signal = get_trading_signal(signal_rsi, fg_value) if fg_value is not None else "N/A"
+            signal_rsi = (crypto['rsi_1h']
+                         if crypto['rsi_1h'] is not None
+                         else crypto['rsi_daily'])
+            signal = (get_trading_signal(signal_rsi, fg_value)
+                     if fg_value is not None else "N/A")
             
-            message += f"{change_emoji} {sym_padded}: {price_padded} {change_str} | <code>RSI (1H/D): {rsi_1h_str}/{rsi_d_str} {signal}</code>\n"
+            main_content += (f"{change_emoji} {sym_padded}: {price_padded} "
+                            f"{change_str} | <code>RSI (1H/D): "
+                            f"{rsi_1h_str}/{rsi_d_str} {signal}</code>\n")
     else:
-        message += "Нет данных\n"
+        main_content += "Нет данных\n"
     
-    # Мудрость дня
-    message += f"\n💭 Мудрость дня:\n{get_daily_wisdom()}"
+    # Финальное сообщение со spoiler
+    message = f"<tg-spoiler>{main_content}</tg-spoiler>"
+    
+    # Мудрость дня (вне spoiler)
+    message += f"\n\n💭 Мудрость дня:\n{get_daily_wisdom()}"
 
     return message
 
@@ -445,9 +505,10 @@ def send_telegram_message():
         response = requests.post(url, data=payload, timeout=10)
         if response.status_code == 200:
             print("Сообщение отправлено успешно!")
-            print(f"Отправленное сообщение:\n{message[:500]}...")  # Лог для отладки
+            print(f"Отправленное сообщение:\n{message[:500]}...")
         else:
-            print(f"Ошибка отправки: {response.status_code} - {response.text}")
+            print(f"Ошибка отправки: {response.status_code} - "
+                  f"{response.text}")
     except Exception as e:
         print(f"Исключение при отправке: {e}")
 
