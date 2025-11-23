@@ -14,7 +14,11 @@ CHAT_ID = '350766421'
 WISDOMS = [
   """Когда цена растет, ты жалеешь, что не купил больше.
      Когда цена падает, ты ненавидишь быть в минусе.
-     Когда цена идет вбок, тебе безумно скучно. Прими эту боль. Крипта SCAM"""
+     Когда цена идет вбок, тебе безумно скучно. Прими эту боль. Крипта SCAM""",
+     
+  """We have a 2030 BTC target; 
+     in our base case, it's around $650,000, 
+     and in our bull case, it's between $1 million and $1.5 million"""
 ]
 
 def get_daily_wisdom():
